@@ -251,6 +251,8 @@ Units = NewType('Units', int)
 MM: Units = 0
 INCHES: Units = 1
 DEGREES: Units = 2
+MSEC: Units = 3
+PERCENT: Units = 4
 
 # Axis
 Axis = NewType('Axis', int)

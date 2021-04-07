@@ -1,5 +1,6 @@
 from vexcode import Color
 
+
 # Sensing
 def near_object():
     """
@@ -34,6 +35,7 @@ def near_object():
     Notice how the if/else statement contains a colon at the end of each line - this indicates to Python that a block of statements follows
     """
     return True
+
 
 def detect(COLOR: Color):
     """
@@ -77,6 +79,7 @@ def detect(COLOR: Color):
     """
     return True
 
+
 def brightness(PERCENT):
     """
     Down Eye sensor brightness
@@ -89,4 +92,4 @@ def brightness(PERCENT):
 
     down_eye.brightness(PERCENT) can be assigned to variables, be used in Boolean expressions, or be used in other commands that take numerical values as a parameter.
     """
-    return 
+    return
