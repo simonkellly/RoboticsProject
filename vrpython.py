@@ -1,4 +1,3 @@
-from vexcode import *
 from enum import Enum
 
 
@@ -34,6 +33,11 @@ class Node:
         self.east_node = None
         self.south_node = None
         self.west_node = None
+
+        self.north_known = False
+        self.east_known = False
+        self.south_known = False
+        self.west_known = False
 
     def get_unicode_char(self):
         node_state = 1
@@ -72,24 +76,40 @@ class Cell:
         self.west_cell = self.maze.cells[self.x_position - 1][self.y_position] if self.x_position - 1 >= 0 else None
 
     def update_north(self, state):
+        self.top_right_node.west_known = True
+        self.top_left_node.east_known = True
         if state:
             self.top_right_node.west_node = self.top_left_node
             self.top_left_node.east_node = self.top_right_node
 
     def update_east(self, state):
+        self.top_right_node.south_known = True
+        self.bottom_right_node.north_known = True
         if state:
             self.top_right_node.south_node = self.bottom_right_node
             self.bottom_right_node.north_node = self.top_right_node
 
     def update_south(self, state):
+        self.bottom_right_node.west_known = True
+        self.bottom_left_node.east_known = True
         if state:
             self.bottom_right_node.west_node = self.bottom_left_node
             self.bottom_left_node.east_node = self.bottom_right_node
 
     def update_west(self, state):
+        self.top_left_node.south_known = True
+        self.bottom_left_node.north_known = True
         if state:
             self.top_left_node.south_node = self.bottom_left_node
             self.bottom_left_node.north_node = self.top_left_node
+
+    def fully_known(self):
+        top_right_known = self.top_right_node.west_known and self.top_right_node.south_known
+        top_left_known = self.top_left_node.east_known and self.top_left_node.south_known
+        bottom_right_known = self.bottom_right_node.north_known and self.bottom_right_node.west_known
+        bottom_left_known = self.bottom_left_node.east_known and self.bottom_left_node.north_known
+
+        return top_right_known and top_left_known and bottom_right_known and bottom_left_known
 
     def check_wall(self, wall):
         if wall == Walls.North: return self.top_right_node.west_node is not None and self.top_left_node.east_node is not None
@@ -162,6 +182,14 @@ class Maze:
             self.cells[x_pos][y_pos].update_west(state)
             decremented_x = x_pos - 1
             if decremented_x >= 0: self.cells[decremented_x][y_pos].update_east(state)
+
+    def all_cells_known(self):
+        for cell_array in self.cells:
+            for cell in cell_array:
+                cell_fully_known = cell.fully_known()
+                if not cell_fully_known:
+                    return False
+        return True
 
     def pathfind_breath_first(self, x_start, y_start, x_end, y_end):
         stack = []
@@ -433,11 +461,186 @@ def set_map(maze_instance):
     maze_instance.update_cell(7, 7, Walls.North, True)
 
 
+def set_modified_map(maze_instance):
+    maze_instance.update_cell(0, 0, Walls.South, True)
+    maze_instance.update_cell(1, 0, Walls.South, True)
+    maze_instance.update_cell(2, 0, Walls.South, True)
+    maze_instance.update_cell(3, 0, Walls.South, True)
+    maze_instance.update_cell(4, 0, Walls.South, False)
+    maze_instance.update_cell(5, 0, Walls.South, True)
+    maze_instance.update_cell(6, 0, Walls.South, True)
+    maze_instance.update_cell(7, 0, Walls.South, True)
+
+    maze_instance.update_cell(0, 0, Walls.West, True)
+    maze_instance.update_cell(1, 0, Walls.West, True)
+    maze_instance.update_cell(2, 0, Walls.West, False)
+    maze_instance.update_cell(3, 0, Walls.West, True)
+    maze_instance.update_cell(4, 0, Walls.West, False)
+    maze_instance.update_cell(5, 0, Walls.West, True)
+    maze_instance.update_cell(6, 0, Walls.West, False)
+    maze_instance.update_cell(7, 0, Walls.West, False)
+
+    maze_instance.update_cell(7, 0, Walls.East, True)
+
+    maze_instance.update_cell(0, 1, Walls.South, False)
+    maze_instance.update_cell(1, 1, Walls.South, False)
+    maze_instance.update_cell(2, 1, Walls.South, False)
+    maze_instance.update_cell(3, 1, Walls.South, False)
+    maze_instance.update_cell(4, 1, Walls.South, False)
+    maze_instance.update_cell(5, 1, Walls.South, False)
+    maze_instance.update_cell(6, 1, Walls.South, True)
+    maze_instance.update_cell(7, 1, Walls.South, False)
+
+    maze_instance.update_cell(0, 1, Walls.West, True)
+    maze_instance.update_cell(1, 1, Walls.West, True)
+    maze_instance.update_cell(2, 1, Walls.West, True)
+    maze_instance.update_cell(3, 1, Walls.West, False)
+    maze_instance.update_cell(4, 1, Walls.West, True)
+    maze_instance.update_cell(5, 1, Walls.West, False)
+    maze_instance.update_cell(6, 1, Walls.West, True)
+    maze_instance.update_cell(7, 1, Walls.West, False)
+
+    maze_instance.update_cell(7, 1, Walls.East, True)
+
+    maze_instance.update_cell(0, 2, Walls.South, False)
+    maze_instance.update_cell(1, 2, Walls.South, False)
+    maze_instance.update_cell(2, 2, Walls.South, True)
+    maze_instance.update_cell(3, 2, Walls.South, False)
+    maze_instance.update_cell(4, 2, Walls.South, True)
+    maze_instance.update_cell(5, 2, Walls.South, False)
+    maze_instance.update_cell(6, 2, Walls.South, False)
+    maze_instance.update_cell(7, 2, Walls.South, True)
+
+    maze_instance.update_cell(0, 2, Walls.West, True)
+    maze_instance.update_cell(1, 2, Walls.West, False)
+    maze_instance.update_cell(2, 2, Walls.West, True)
+    maze_instance.update_cell(3, 2, Walls.West, False)
+    maze_instance.update_cell(4, 2, Walls.West, False)
+    maze_instance.update_cell(5, 2, Walls.West, True)
+    maze_instance.update_cell(6, 2, Walls.West, True)
+    maze_instance.update_cell(7, 2, Walls.West, False)
+
+    maze_instance.update_cell(7, 2, Walls.East, True)
+
+    maze_instance.update_cell(0, 3, Walls.South, False)
+    maze_instance.update_cell(1, 3, Walls.South, False)
+    maze_instance.update_cell(2, 3, Walls.South, False)
+    maze_instance.update_cell(3, 3, Walls.South, True)
+    maze_instance.update_cell(4, 3, Walls.South, True)
+    maze_instance.update_cell(5, 3, Walls.South, False)
+    maze_instance.update_cell(6, 3, Walls.South, True)
+    maze_instance.update_cell(7, 3, Walls.South, False)
+
+    maze_instance.update_cell(0, 3, Walls.West, True)
+    maze_instance.update_cell(1, 3, Walls.West, False)
+    maze_instance.update_cell(2, 3, Walls.West, False)
+    maze_instance.update_cell(3, 3, Walls.West, True)
+    maze_instance.update_cell(4, 3, Walls.West, False)
+    maze_instance.update_cell(5, 3, Walls.West, False)
+    maze_instance.update_cell(6, 3, Walls.West, False)
+    maze_instance.update_cell(7, 3, Walls.West, True)
+
+    maze_instance.update_cell(7, 3, Walls.East, True)
+
+    maze_instance.update_cell(0, 4, Walls.South, False)
+    maze_instance.update_cell(1, 4, Walls.South, True)
+    maze_instance.update_cell(2, 4, Walls.South, False)
+    maze_instance.update_cell(3, 4, Walls.South, False)
+    maze_instance.update_cell(4, 4, Walls.South, False)
+    maze_instance.update_cell(5, 4, Walls.South, True)
+    maze_instance.update_cell(6, 4, Walls.South, False)
+    maze_instance.update_cell(7, 4, Walls.South, False)
+
+    maze_instance.update_cell(0, 4, Walls.West, True)
+    maze_instance.update_cell(1, 4, Walls.West, True)
+    maze_instance.update_cell(2, 4, Walls.West, False)
+    maze_instance.update_cell(3, 4, Walls.West, True)
+    maze_instance.update_cell(4, 4, Walls.West, True)
+    maze_instance.update_cell(5, 4, Walls.West, False)
+    maze_instance.update_cell(6, 4, Walls.West, True)
+    maze_instance.update_cell(7, 4, Walls.West, True)
+
+    maze_instance.update_cell(7, 4, Walls.East, True)
+
+    maze_instance.update_cell(0, 5, Walls.South, True)
+    maze_instance.update_cell(1, 5, Walls.South, False)
+    maze_instance.update_cell(2, 5, Walls.South, False)
+    maze_instance.update_cell(3, 5, Walls.South, False)
+    maze_instance.update_cell(4, 5, Walls.South, True)
+    maze_instance.update_cell(5, 5, Walls.South, False)
+    maze_instance.update_cell(6, 5, Walls.South, False)
+    maze_instance.update_cell(7, 5, Walls.South, False)
+
+    maze_instance.update_cell(0, 5, Walls.West, True)
+    maze_instance.update_cell(1, 5, Walls.West, False)
+    maze_instance.update_cell(2, 5, Walls.West, True)
+    maze_instance.update_cell(3, 5, Walls.West, False)
+    maze_instance.update_cell(4, 5, Walls.West, True)
+    maze_instance.update_cell(5, 5, Walls.West, False)
+    maze_instance.update_cell(6, 5, Walls.West, False)
+    maze_instance.update_cell(7, 5, Walls.West, True)
+
+    maze_instance.update_cell(7, 5, Walls.East, True)
+
+    maze_instance.update_cell(0, 6, Walls.South, False)
+    maze_instance.update_cell(1, 6, Walls.South, False)
+    maze_instance.update_cell(2, 6, Walls.South, True)
+    maze_instance.update_cell(3, 6, Walls.South, True)
+    maze_instance.update_cell(4, 6, Walls.South, False)
+    maze_instance.update_cell(5, 6, Walls.South, True)
+    maze_instance.update_cell(6, 6, Walls.South, True)
+    maze_instance.update_cell(7, 6, Walls.South, False)
+
+    maze_instance.update_cell(0, 6, Walls.West, True)
+    maze_instance.update_cell(1, 6, Walls.West, True)
+    maze_instance.update_cell(2, 6, Walls.West, False)
+    maze_instance.update_cell(3, 6, Walls.West, False)
+    maze_instance.update_cell(4, 6, Walls.West, True)
+    maze_instance.update_cell(5, 6, Walls.West, True)
+    maze_instance.update_cell(6, 6, Walls.West, False)
+    maze_instance.update_cell(7, 6, Walls.West, True)
+
+    maze_instance.update_cell(7, 6, Walls.East, True)
+
+    maze_instance.update_cell(0, 7, Walls.South, False)
+    maze_instance.update_cell(1, 7, Walls.South, True)
+    maze_instance.update_cell(2, 7, Walls.South, True)
+    maze_instance.update_cell(3, 7, Walls.South, False)
+    maze_instance.update_cell(4, 7, Walls.South, False)
+    maze_instance.update_cell(5, 7, Walls.South, False)
+    maze_instance.update_cell(6, 7, Walls.South, False)
+    maze_instance.update_cell(7, 7, Walls.South, False)
+
+    maze_instance.update_cell(0, 7, Walls.West, True)
+    maze_instance.update_cell(1, 7, Walls.West, False)
+    maze_instance.update_cell(2, 7, Walls.West, False)
+    maze_instance.update_cell(3, 7, Walls.West, True)
+    maze_instance.update_cell(4, 7, Walls.West, False)
+    maze_instance.update_cell(5, 7, Walls.West, False)
+    maze_instance.update_cell(6, 7, Walls.West, True)
+    maze_instance.update_cell(7, 7, Walls.West, False)
+
+    maze_instance.update_cell(7, 7, Walls.East, True)
+
+    maze_instance.update_cell(0, 7, Walls.North, True)
+    maze_instance.update_cell(1, 7, Walls.North, True)
+    maze_instance.update_cell(2, 7, Walls.North, True)
+    maze_instance.update_cell(3, 7, Walls.North, False)
+    maze_instance.update_cell(4, 7, Walls.North, True)
+    maze_instance.update_cell(5, 7, Walls.North, True)
+    maze_instance.update_cell(6, 7, Walls.North, True)
+    maze_instance.update_cell(7, 7, Walls.North, True)
+
+
 def main():
     maze = Maze(8, 8)
     maze.initialize_maze()
-    set_map(maze)
+    brain_print("Creating maze...")
+    brain_newline()
+    set_modified_map(maze)
     maze.print_plain()
+    brain_newline()
+    brain_print("The maze is fully known" if maze.all_cells_known() else "Maze incomplete")
     brain_newline()
     path = maze.pathfind_breath_first(4, 0, 3, 7)
     brain_print("Path-finding Complete! \nThe shortest route is {0} cells".format(len(path) - 1))
@@ -447,14 +650,27 @@ def main():
     maze.print_path(path, '•')
     brain_newline()
 
+
+# def brain_print(item):
+#     brain.print(item)
+#     return
+#
+#
+# def brain_newline():
+#     brain.new_line()
+#     return
+
 def brain_print(item):
-    brain.print(item)
+    print(item, end="")
     return
 
 
 def brain_newline():
-    brain.new_line()
+    print("")
     return
 
+
 # VR threads — Do not delete
-vr_thread(main())
+# vr_thread(main())
+
+main()
