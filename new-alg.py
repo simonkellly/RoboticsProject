@@ -45,6 +45,11 @@ class Node:
         self.south_visited = 0
         self.west_visited = 0
 
+        self.north_forced = False
+        self.east_forced = False
+        self.south_forced = False
+        self.west_forced = False
+
     def get_unicode_char(self):
         node_state = 1
         if self.north_node is not None: node_state *= 2
@@ -94,8 +99,8 @@ class Cell:
             self.bottom_right_node.west_visited += 1
             self.bottom_left_node.east_visited += 1
         if wall == Walls.West:
-            self.top_left_node.south_known += 1
-            self.bottom_left_node.north_known += 1
+            self.top_left_node.south_visited += 1
+            self.bottom_left_node.north_visited += 1
 
     def check_visited(self, wall):
         if wall == Walls.North:
@@ -106,6 +111,33 @@ class Cell:
             return self.bottom_right_node.west_visited
         if wall == Walls.West:
             return self.top_left_node.south_visited
+
+    def force_wall(self, wall, state):
+        self.visit_wall(wall)
+        self.visit_wall(wall)
+
+        if wall == Walls.North:
+            self.update_north(state)
+            self.top_right_node.west_forced = True
+        if wall == Walls.East:
+            self.update_east(state)
+            self.top_right_node.south_forced = True
+        if wall == Walls.South:
+            self.update_south(state)
+            self.bottom_right_node.west_forced = True
+        if wall == Walls.West:
+            self.update_west(state)
+            self.top_left_node.south_forced = True
+
+    def check_forced(self, wall):
+        if wall == Walls.North:
+            return self.top_right_node.west_forced
+        if wall == Walls.East:
+            return self.top_right_node.south_forced
+        if wall == Walls.South:
+            return self.bottom_right_node.west_forced
+        if wall == Walls.West:
+            return self.top_left_node.south_forced
 
     def update_north(self, state):
         self.top_right_node.west_known = True
@@ -150,9 +182,6 @@ class Cell:
         top_left_known = self.top_left_node.east_known and self.top_left_node.south_known
         bottom_right_known = self.bottom_right_node.north_known and self.bottom_right_node.west_known
         bottom_left_known = self.bottom_left_node.east_known and self.bottom_left_node.north_known
-        fully_known = top_right_known and top_left_known and bottom_right_known and bottom_left_known
-        if not fully_known:
-            brain_print_line("Not Fully Known ({0}, {1})".format(self.x_position, self.y_position))
 
         return top_right_known and top_left_known and bottom_right_known and bottom_left_known
 
@@ -191,7 +220,6 @@ class Maze:
     def __init__(self, width, height):
         self.width = width
         self.height = height
-        self.updated_cells = 0
 
         self.cells = []
         self.nodes = []
@@ -217,30 +245,68 @@ class Maze:
 
         if x_pos < 0 or y_pos < 0:
             return
-        if not self.cells[x_pos][y_pos].wall_known(wall):
-            self.updated_cells += 1
-            brain.clear()
-            self.print_plain()
-            brain_print_line(self.updated_cells)
-            if wall == Walls.North:
-                self.cells[x_pos][y_pos].update_north(state)
-                incremented_y = y_pos + 1
-                if incremented_y < self.height: self.cells[x_pos][incremented_y].update_south(state)
-            if wall == Walls.East:
-                self.cells[x_pos][y_pos].update_east(state)
-                incremented_x = x_pos + 1
-                if incremented_x < self.width: self.cells[incremented_x][y_pos].update_west(state)
-            if wall == Walls.South:
-                self.cells[x_pos][y_pos].update_south(state)
-                decremented_y = y_pos - 1
-                if decremented_y >= 0: self.cells[x_pos][decremented_y].update_north(state)
-            if wall == Walls.West:
-                self.cells[x_pos][y_pos].update_west(state)
-                decremented_x = x_pos - 1
-                if decremented_x >= 0: self.cells[decremented_x][y_pos].update_east(state)
+
+        if wall == Walls.North:
+            self.cells[x_pos][y_pos].update_north(state)
+            incremented_y = y_pos + 1
+            if incremented_y < self.height: self.cells[x_pos][incremented_y].update_south(state)
+        if wall == Walls.East:
+            self.cells[x_pos][y_pos].update_east(state)
+            incremented_x = x_pos + 1
+            if incremented_x < self.width: self.cells[incremented_x][y_pos].update_west(state)
+        if wall == Walls.South:
+            self.cells[x_pos][y_pos].update_south(state)
+            decremented_y = y_pos - 1
+            if decremented_y >= 0: self.cells[x_pos][decremented_y].update_north(state)
+        if wall == Walls.West:
+            self.cells[x_pos][y_pos].update_west(state)
+            decremented_x = x_pos - 1
+            if decremented_x >= 0: self.cells[decremented_x][y_pos].update_east(state)
+
+        for cell_arr in self.cells:
+            for cell in cell_arr:
+                # current_cell = self.cells[x_pos][y_pos]
+                current_cell = cell
+                north_known_and_wall = (current_cell.wall_known(Walls.North) and current_cell.check_wall(Walls.North)) or current_cell.check_forced(Walls.North)
+                east_known_and_wall = (current_cell.wall_known(Walls.East) and current_cell.check_wall(Walls.East)) or current_cell.check_forced(Walls.East)
+                south_known_and_wall = (current_cell.wall_known(Walls.South) and current_cell.check_wall(Walls.South)) or current_cell.check_forced(Walls.South)
+                west_known_and_wall = (current_cell.wall_known(Walls.West) and current_cell.check_wall(Walls.West)) or current_cell.check_forced(Walls.West)
+                if int(north_known_and_wall) + int(east_known_and_wall) + int(south_known_and_wall) + int(west_known_and_wall) == 3:
+                    if not north_known_and_wall:
+                        current_cell.force_wall(Walls.North, False)
+                    if not east_known_and_wall:
+                        current_cell.force_wall(Walls.East, False)
+                    if not south_known_and_wall:
+                        current_cell.force_wall(Walls.South, False)
+                    if not west_known_and_wall:
+                        current_cell.force_wall(Walls.West, False)
+
+    def check_for_boxed(self):
+        for cell_arr in self.cells:
+            for cell in cell_arr:
+                # current_cell = self.cells[x_pos][y_pos]
+                current_cell = cell
+                north_known_and_wall = (current_cell.wall_known(Walls.North) and current_cell.check_wall(Walls.North)) or current_cell.check_forced(Walls.North)
+                east_known_and_wall = (current_cell.wall_known(Walls.East) and current_cell.check_wall(Walls.East)) or current_cell.check_forced(Walls.East)
+                south_known_and_wall = (current_cell.wall_known(Walls.South) and current_cell.check_wall(Walls.South)) or current_cell.check_forced(Walls.South)
+                west_known_and_wall = (current_cell.wall_known(Walls.West) and current_cell.check_wall(Walls.West)) or current_cell.check_forced(Walls.West)
+                if int(north_known_and_wall) + int(east_known_and_wall) + int(south_known_and_wall) + int(west_known_and_wall) == 3:
+                    if not north_known_and_wall:
+                        current_cell.force_wall(Walls.North, False)
+                    if not east_known_and_wall:
+                        current_cell.force_wall(Walls.East, False)
+                    if not south_known_and_wall:
+                        current_cell.force_wall(Walls.South, False)
+                    if not west_known_and_wall:
+                        current_cell.force_wall(Walls.West, False)
 
     def all_cells_known(self):
-        return self.updated_cells == 144
+        for cell_array in self.cells:
+            for cell in cell_array:
+                cell_fully_known = cell.fully_known()
+                if not cell_fully_known:
+                    return False
+        return True
 
     def pathfind_breath_first(self, x_start, y_start, x_end, y_end):
         stack = []
@@ -355,6 +421,10 @@ class Robot:
         drivetrain.drive_for(FORWARD, self.maze_cell_length, self.distance_unit)
         return
 
+    def drive_square_reverse(self):
+        drivetrain.drive_for(REVERSE, self.maze_cell_length, self.distance_unit)
+        return
+
     def get_current_cell_location(self):
         x_pos = location.position(X, MM) + 1000
         y_pos = location.position(Y, MM) + 1000
@@ -389,10 +459,20 @@ class Robot:
         left_wall = (self.get_facing_wall() + 3) % 4
         if self.left_known():
             return current_cell.check_wall(left_wall)
-        drivetrain.turn_for(LEFT, 60, self.angle_unit)
-        wall_present = self.check_short_forward()
-        drivetrain.turn_for(RIGHT, 60, self.angle_unit)
+        drivetrain.turn_for(LEFT, 47, self.angle_unit)
+        wall_present = self.check_forward()
+        drivetrain.turn_for(RIGHT, 47, self.angle_unit)
         return wall_present
+
+    def check_short_forward(self):
+        current_position = self.get_current_cell_location()
+        current_cell = self.get_current_cell()
+        facing_wall = self.get_facing_wall()
+        if current_cell.wall_known(facing_wall):
+            return current_cell.check_wall(facing_wall)
+        state = distance.get_distance(self.distance_unit) < 100 or (down_eye.detect(RED) and facing_wall == Walls.North) or (down_eye.detect(GREEN) and facing_wall == Walls.South)
+        self.maze.update_cell(current_position[0], current_position[1], facing_wall, state)
+        return state
 
     def check_long_forward(self):
         current_position = self.get_current_cell_location()
@@ -420,61 +500,27 @@ class Robot:
             self.maze.update_cell(current_position[0] - (dist // 250), current_position[1], facing_wall, True)
         return dist < 150
 
-    def check_short_forward(self):
-        current_position = self.get_current_cell_location()
-        current_cell = self.get_current_cell()
-        facing_wall = self.get_facing_wall()
-        if current_cell.wall_known(facing_wall):
-            return current_cell.check_wall(facing_wall)
-        state = distance.get_distance(self.distance_unit) < 100 or (down_eye.detect(RED) and facing_wall == Walls.North) or (down_eye.detect(GREEN) and facing_wall == Walls.South)
-        self.maze.update_cell(current_position[0], current_position[1], facing_wall, state)
-        return state
-
     def check_forward(self):
         current_position = self.get_current_cell_location()
         current_cell = self.get_current_cell()
         facing_wall = self.get_facing_wall()
         if current_cell.wall_known(facing_wall):
             return current_cell.check_wall(facing_wall)
+        self.check_long_forward()
         state = distance.get_distance(self.distance_unit) < 150 or (down_eye.detect(RED) and facing_wall == Walls.North) or (down_eye.detect(GREEN) and facing_wall == Walls.South)
         self.maze.update_cell(current_position[0], current_position[1], facing_wall, state)
         return state
 
-    def pledge_algorithm(self):
-        finished = False
-        while not finished:
-            finished = self.maze.all_cells_known()
-            if not self.check_short_forward():
-                self.drive_square()
-            else:
-                started = False;
-                counter = -1
-                inner_finished = False
-                while counter is not 0 or finished:
-                    inner_finished = self.maze.all_cells_known()
-                    if not started:
-                        counter = 0
-                        started = True
-
-                    if not self.check_left():
-                        drivetrain.turn_for(LEFT, 90, self.angle_unit)
-                        counter += 1
-                        self.drive_square()
-                        continue
-                    if not self.check_forward():
-                        self.drive_square()
-                        continue
-                    drivetrain.turn_for(RIGHT, 90, self.angle_unit)
-                    counter -= 1
-
-    def force_check_current_cell_wall(self, cell, wall):
+    def force_check_current_cell_wall(self, wall):
         cell = self.get_current_cell()
         if cell.wall_known(wall):
             return cell.check_wall(wall)
-        if wall == Walls.North:
-            heading = (90 * wall) % 360
-            drivetrain.turn_to_heading(heading)
-            return self.check_long_forward()
+        self.turn_to_wall(wall)
+        return self.check_forward()
+
+    def turn_to_wall(self, wall):
+        target_wall_heading = (90 * wall) % 360
+        drivetrain.turn_to_heading(target_wall_heading, self.angle_unit)
 
     def check_junction(self):
         north = self.force_check_current_cell_wall(Walls.North)
@@ -483,26 +529,49 @@ class Robot:
         west = self.force_check_current_cell_wall(Walls.West)
         return [north, east, south, west]
 
-    def tremaux_algorithm(self):
-        previous_direction = Walls.North
-        self.get_current_cell().visit_wall(previous_direction)
-        self.get_current_cell().visit_wall(previous_direction)
+    def drive_through_wall(self, wall):
+        facing_wall = self.get_facing_wall()
+        if facing_wall == wall:
+            self.drive_square()
+            return
+        if wall % 2 != facing_wall % 2:
+            self.turn_to_wall(wall)
+            self.drive_square()
+            return
+        self.drive_square_reverse()
 
+    def tremaux_algorithm(self):
         finished = False
         while not finished:
-            finished = self.maze.all_cells_known
-            if finished: continue
+            finished = self.maze.all_cells_known()
+            if finished: return
 
+            self.maze.check_for_boxed()
+            possible_paths = []
+            current_cell = self.get_current_cell()
             junction_states = self.check_junction()
-            previous_direction = 4
             for index in range(len(junction_states)):
+                if not junction_states[index]:
+                    times_visited = current_cell.check_visited(index)
+                    possible_paths.append((times_visited, index))
 
+            possible_paths.sort()
+            facing_wall = self.get_facing_wall()
+            # Sorting by anything more complex than a simple lambda didnt seem to work even when it worked on other python interpretrs
+            next_step = None
+            min_visited = possible_paths[0][0]
+            for pair in possible_paths:
+                if pair[1] == facing_wall and pair[0] == min_visited:
+                    next_step = pair[1]
 
+            if next_step == None:
+                next_step = possible_paths[0][1]
+
+            current_cell.visit_wall(next_step)
+            self.drive_through_wall(next_step)
 
 
 def main():
-    drivetrain.set_drive_velocity(100, PERCENT)
-    drivetrain.set_turn_velocity(100, PERCENT)
     maze = Maze(8, 8)
     robot = Robot(maze)
     pen.move(DOWN)
@@ -545,30 +614,30 @@ def main():
     maze.update_cell(7, 6, Walls.East, True)
     maze.update_cell(7, 7, Walls.East, True)
 
-    # robot.pledge_algorithm()
-    finished = False
-    while not finished:
-        finished = maze.all_cells_known()
-        robot.check_long_forward()
-        if finished: continue
-        if not robot.check_left():
-            drivetrain.turn_for(LEFT, 90, robot.angle_unit)
-            robot.drive_square()
-            continue
-        if not robot.check_forward():
-            robot.drive_square()
-            continue
-        drivetrain.turn_for(RIGHT, 90, robot.angle_unit)
+    # Add check f for if there arte three walls then we know there must be no wall on the fouth
+    drivetrain.set_drive_velocity(1000, PERCENT)
+    drivetrain.set_turn_velocity(1000, PERCENT)
+    robot.tremaux_algorithm()
+    # finished = False
+    # while not finished:
+    #     finished = maze.all_cells_known()
+    #     if finished: continue
+    #     if not robot.check_left():
+    #         drivetrain.turn_for(LEFT, 90, robot.angle_unit)
+    #         robot.drive_square()
+    #         continue
+    #     if not robot.check_forward():
+    #         robot.drive_square()
+    #         continue
+    #     drivetrain.turn_for(RIGHT, 90, robot.angle_unit)
 
+    brain.new_line()
     maze.print_plain()
     brain.new_line()
     path = maze.pathfind_breath_first(4, 0, 3, 7)
     maze.print_path(path, '•')
-
-    brain.print(robot.check_left())
-    brain.print(robot.check_forward())
-
     brain_print_line("Program Complete")
+    stop_project()
 
 
 def brain_print(item):
