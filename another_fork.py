@@ -110,9 +110,9 @@ class Cell:
         if wall == Walls.West:
             return self.top_left_node.south_visited
 
-    def force_wall(self, wall):
-        self.visit_wall(wall)
-        self.visit_wall(wall)
+    def force_wall(self, wall, amount=2):
+        for visit in range(amount):
+            self.visit_wall(wall)
 
         if wall == Walls.North:
             self.update_north(False)
@@ -290,7 +290,6 @@ class Maze:
 
     def fix_actually_known_corners(self):
         amount_changed = 0
-        count = 0
         for cell_arr in self.cells:
             for cell in cell_arr:
                 amount_changed += self.extrapolate_edges(cell)
@@ -471,17 +470,38 @@ class Robot:
         self.drive_square(False)
 
     def update_forward(self, current_position, step, facing_wall, state):
+
         if facing_wall == Walls.North:
+            if current_position[1] + step >= len(self.maze.cells[current_position[0]]): return
             self.maze.update_cell(current_position[0], current_position[1] + step, facing_wall, state)
 
         if facing_wall == Walls.East:
+            if current_position[0] + step >= len(self.maze.cells): return
             self.maze.update_cell(current_position[0] + step, current_position[1], facing_wall, state)
 
         if facing_wall == Walls.South:
+            if current_position[1] - step < 0: return
             self.maze.update_cell(current_position[0], current_position[1] - step, facing_wall, state)
 
         if facing_wall == Walls.East:
+            if current_position[0] - step < 0: return
             self.maze.update_cell(current_position[0] - step, current_position[1], facing_wall, state)
+
+    def check_long_forward(self):
+        current_position = self.get_current_cell_location()
+        facing_wall = self.get_facing_wall()
+        distance_to_wall = distance.get_distance(self.distance_unit)
+        sensor_range = distance_to_wall // 250
+
+        step_zero = distance_to_wall < 150
+        self.maze.update_cell(current_position[0], current_position[1], facing_wall, step_zero)
+        if sensor_range == 0:
+            return self.get_current_cell().check_wall(facing_wall)
+
+        for step in range(1, sensor_range):
+            self.update_forward(current_position, step, facing_wall, False)
+        self.update_forward(current_position, sensor_range, facing_wall, False)
+        return self.get_current_cell().check_wall(facing_wall)
 
     def check_full_forward(self):
         current_position = self.get_current_cell_location()
@@ -490,6 +510,9 @@ class Robot:
 
         state = distance_to_wall < 150
         self.maze.update_cell(current_position[0], current_position[1], facing_wall, state)
+        fixed_corners = -1
+        while fixed_corners != 0:
+            fixed_corners = self.maze.fix_actually_known_corners()
         return self.get_current_cell().check_wall(facing_wall)
 
         if distance_to_wall > 250:
@@ -522,6 +545,9 @@ class Robot:
         distance_to_wall = distance.get_distance(self.distance_unit)
         state = distance_to_wall < self.short_tolerance
         self.maze.update_cell(current_position[0], current_position[1], facing_wall, state)
+        fixed_corners = -1
+        while fixed_corners != 0:
+            fixed_corners = self.maze.fix_actually_known_corners()
         return self.get_current_cell().check_wall(facing_wall)
 
     def check_junction(self):
@@ -583,12 +609,12 @@ class Robot:
             self.turn_short_to_wall(wall_three_direction, True)
             wall_three = self.check_short_forward()
 
-
         directions_sorted = []  # say line too long so did append
         directions_sorted.append((wall_zero_direction, wall_zero))
         directions_sorted.append((wall_one_direction, wall_one))
         directions_sorted.append((wall_two_direction, wall_two))
         directions_sorted.append((wall_three_direction, wall_three))
+
         directions_sorted.sort()
 
         result = []
@@ -598,15 +624,14 @@ class Robot:
     def tremaux_algorithm(self):
         finished = False
         while not finished:
+            fixed_corners = -1
+            while fixed_corners != 0:
+                fixed_corners = self.maze.fix_actually_known_corners()
+
             finished = self.maze.all_cells_known()
             if finished: return
             brain.clear()
             self.maze.print_plain()
-
-            fixed_corners = -1
-            while fixed_corners != 0:
-                fixed_corners = self.maze.fix_actually_known_corners()
-                brain_print_line(fixed_corners)
 
             current_cell = self.get_current_cell()
             facing_wall = self.get_facing_wall()
