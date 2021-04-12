@@ -1,7 +1,7 @@
 # EEEN10020-Robotics Design Project - 2021 Spring
 
-## Team 18
+## Maze Solving Robot
+This is a maze solving robot written in python for the Vexcode VR platform
+It uses the tremaux algorithm to fully explore the maze, followed by a breath first search to pathfind around the maze to print the optimal path from start to end
 
-### Team Members
-- Dan Redmond
-- Simon Kelly
+Project completed 12/4/2021
