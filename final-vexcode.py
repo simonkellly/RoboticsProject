@@ -179,7 +179,7 @@ class Maze:
 
         for cell_array in self.cells:
             for cell in cell_array:
-                cell.initialize_cells()
+                cell.initialize_cell()
 
     def update_cell(self, x_pos, y_pos, wall, state):
         if x_pos - 1 > len(self.cells) or y_pos - 1 > len(self.cells[x_pos]):

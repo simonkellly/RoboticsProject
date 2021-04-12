@@ -1,7 +1,23 @@
+# =================================================
+#
+# EEEN10020-Robotics Design Project-2020/21 Spring
+#
+# Maze Traversing Robot v0.3.0
+# Group 18 - Dan Redmond and Simon Kelly
+#
+# Note: Extra static data that is constant across all the maps is used if competition mode is enabled
+# The robot works without it, it just provided a speed boost to the overall mapping.
+# =================================================
 from enum import IntEnum
 from vexcode import *
 
+# COMPETITION_MODE should be enabled if used in the dynamic wall maze or wall-maze playground modes
+# The robot functions correctly without it but it provided a speed boost if used
+COMPETITION_MODE = True
 
+
+# The wall enum is used to convert to and from integer values into their corresponding walls
+# This makes referring to specific walls more readable, and easier to change if say one were to switch to a hexagon maze
 class Walls(IntEnum):
     North = 0
     East = 1
@@ -9,6 +25,8 @@ class Walls(IntEnum):
     West = 3
 
 
+# The node object can be thought of similar to a corner in the maze. It stores information about its connected nodes and various properties.
+# Analysis of this allow the robot to infer the state of different walls in the maze so the robot doesn't have to travel there
 class Node:
     unicode_chars = dict([
         (1, ' '),  # Walls: None
@@ -59,6 +77,9 @@ class Node:
         return self.unicode_chars[node_state]
 
 
+# Cells in the maze are essentially grid squares with the four walls surrounding it. The cell also has knowledge of its neighbouring cells
+# A cell wall is made up of two nodes, with a wall being present if the two nodes are connected. The nodes also store if they know what their value is
+# so that when checking if all the walls in a cell are known, it allows for nodes to not be connected and for the robot to know their definite state
 class Cell:
     def __init__(self, x_pos, y_pos, maze):
         self.x_position = x_pos
@@ -75,7 +96,7 @@ class Cell:
         self.south_cell = None
         self.west_cell = None
 
-    def initialize_cells(self):
+    def initialize_cell(self):
         self.top_right_node = self.maze.nodes[self.x_position + 1][self.y_position + 1]
         self.top_left_node = self.maze.nodes[self.x_position][self.y_position + 1]
         self.bottom_left_node = self.maze.nodes[self.x_position][self.y_position]
@@ -195,9 +216,6 @@ class Cell:
         # throw new InvalidEnumArgumentException() :(
 
     def get_unicode_char(self, wall):
-        if not self.wall_known(wall): return '?'
-        if not self.check_wall(wall): return self.check_visited(wall)
-
         if wall == Walls.North:
             if self.check_wall(wall):
                 return '─'
@@ -221,6 +239,7 @@ class Cell:
         # throw new InvalidEnumArgumentException() :(
 
 
+# The maze is the overall structure of cells and what stores the representation of the real world maze.
 class Maze:
     def __init__(self, width, height):
         self.width = width
@@ -229,28 +248,39 @@ class Maze:
         self.cells = []
         self.nodes = []
 
+    # Initializing the maze with this method sets up the nested lists that hold the structure of the cells
+    # It also sets up the nodes (corners) so the cells can be correctly initialized also
     def initialize_maze(self):
+        # This creates sets of cell arrays which correspond to rows in the 'grid' of the maze
         for x_pos in range(self.width):
             self.cells.append([])
             for y_pos in range(self.height):
+                # This creates a new cell at the given x, y position and stores it in the data structure
                 self.cells[x_pos].append(Cell(x_pos, y_pos, self))
 
+        # Similarly this creates the node arrays which store the nodes in the data structure
         for x_pos in range(self.width + 1):
             self.nodes.append([])
             for y_pos in range(self.height + 1):
+                # Nodes are created and added to the list, they are given no information about their position as it is managed by the cells and maze
                 self.nodes[x_pos].append(Node())
 
+        # Following the setup of the cell and node lists, the cells are looped through and initialized themselves.
         for cell_array in self.cells:
             for cell in cell_array:
-                cell.initialize_cells()
+                cell.initialize_cell()
 
+    # update_cell is called for a cell at the give (x_pos, y_pos) location in the maze
+    # It updates the wall set in the method's parameters to the given state, with True meaning a wall is present
     def update_cell(self, x_pos, y_pos, wall, state):
+        # The following checks ensures no index outside of the bounds of the cell array will be accessed
         if x_pos - 1 > len(self.cells) or y_pos - 1 > len(self.cells[x_pos]):
             return
-
         if x_pos < 0 or y_pos < 0:
             return
 
+        # This calls the appropriate update method on the given cell depending on which wall is being updated
+        # It also calls an update method on the cell with the common wall if that cell exists
         if wall == Walls.North:
             self.cells[x_pos][y_pos].update_north(state)
             incremented_y = y_pos + 1
@@ -268,6 +298,9 @@ class Maze:
             decremented_x = x_pos - 1
             if decremented_x >= 0: self.cells[decremented_x][y_pos].update_east(state)
 
+    # This method can check a given cell for having three present walls, and if this is the case
+    # For extra speed we can assume that s a cell must be accessible from at least one side
+    # therefore if there is three walls present, we can infer that the last edge is going to not be present
     def extrapolate_edges(self, cell):
         north = (cell.check_wall(Walls.North) and cell.wall_known(Walls.North)) or cell.check_forced(Walls.North)
         east = (cell.check_wall(Walls.East) and cell.wall_known(Walls.East)) or cell.check_forced(Walls.East)
@@ -287,6 +320,7 @@ class Maze:
             cell.force_wall(Walls.West)
             amount_changed += 1
         return amount_changed
+
 
     def fix_actually_known_corners(self):
         amount_changed = 0
@@ -344,97 +378,115 @@ class Maze:
 
     def print_plain(self):
         for x_pos in range(self.width):
-            brain_print(self.nodes[x_pos][self.height].get_unicode_char())
+            brain.print(self.nodes[x_pos][self.height].get_unicode_char())
             decremented_height = self.height - 1
-            brain_print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
-            brain_print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
-            brain_print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
-        brain_print(self.nodes[self.width][self.height].get_unicode_char())
+            brain.print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
+            brain.print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
+            brain.print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
+        brain.print(self.nodes[self.width][self.height].get_unicode_char())
 
         for y_pos in reversed(range(self.height)):
-            brain_newline()
+            brain.new_line()
             for x_pos in range(self.width):
-                brain_print(self.cells[x_pos][y_pos].get_unicode_char(Walls.West))
-                brain_print(' ')
-                brain_print(' ')
-                brain_print(' ')
+                brain.print(self.cells[x_pos][y_pos].get_unicode_char(Walls.West))
+                brain.print(' ')
+                brain.print(' ')
+                brain.print(' ')
             decremented_width = self.width - 1
-            brain_print(self.cells[decremented_width][y_pos].get_unicode_char(Walls.East))
+            brain.print(self.cells[decremented_width][y_pos].get_unicode_char(Walls.East))
 
-            brain_newline()
+            brain.new_line()
             for x_pos in range(self.width):
-                brain_print(self.nodes[x_pos][y_pos].get_unicode_char())
-                brain_print(self.cells[x_pos][y_pos].get_unicode_char(Walls.South))
-                brain_print(self.cells[x_pos][y_pos].get_unicode_char(Walls.South))
-                brain_print(self.cells[x_pos][y_pos].get_unicode_char(Walls.South))
-            brain_print(self.nodes[self.width][y_pos].get_unicode_char())
+                brain.print(self.nodes[x_pos][y_pos].get_unicode_char())
+                brain.print(self.cells[x_pos][y_pos].get_unicode_char(Walls.South))
+                brain.print(self.cells[x_pos][y_pos].get_unicode_char(Walls.South))
+                brain.print(self.cells[x_pos][y_pos].get_unicode_char(Walls.South))
+            brain.print(self.nodes[self.width][y_pos].get_unicode_char())
 
     def print_path(self, path, path_char):
         for x_pos in range(self.width):
-            brain_print(self.nodes[x_pos][self.height].get_unicode_char())
+            brain.print(self.nodes[x_pos][self.height].get_unicode_char())
             decremented_height = self.height - 1
-            brain_print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
-            brain_print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
-            brain_print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
-        brain_print(self.nodes[self.width][self.height].get_unicode_char())
+            brain.print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
+            brain.print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
+            brain.print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
+        brain.print(self.nodes[self.width][self.height].get_unicode_char())
 
         for y_pos in reversed(range(self.height)):
-            brain_newline()
+            brain.new_line()
             for x_pos in range(self.width):
                 wall_char = self.cells[x_pos][y_pos].get_unicode_char(Walls.West)
                 mid_in_path = (x_pos, y_pos) in path
                 wall_in_path = wall_char == ' ' and mid_in_path and (x_pos - 1, y_pos) in path
-                brain_print(path_char if wall_in_path else wall_char)
-                brain_print(' ')
-                brain_print(path_char if mid_in_path else ' ')
-                brain_print(' ')
+                brain.print(path_char if wall_in_path else wall_char)
+                brain.print(' ')
+                brain.print(path_char if mid_in_path else ' ')
+                brain.print(' ')
             decremented_width = self.width - 1
-            brain_print(self.cells[decremented_width][y_pos].get_unicode_char(Walls.East))
+            brain.print(self.cells[decremented_width][y_pos].get_unicode_char(Walls.East))
 
-            brain_newline()
+            brain.new_line()
             for x_pos in range(self.width):
                 wall_char = self.cells[x_pos][y_pos].get_unicode_char(Walls.South)
                 wall_in_path = wall_char == ' ' and (x_pos, y_pos) in path and (x_pos, y_pos - 1) in path  # Might have check for x_pos == 0
-                brain_print(self.nodes[x_pos][y_pos].get_unicode_char())
-                brain_print(wall_char)
-                brain_print(path_char if wall_in_path else wall_char)
-                brain_print(wall_char)
-            brain_print(self.nodes[self.width][y_pos].get_unicode_char())
+                brain.print(self.nodes[x_pos][y_pos].get_unicode_char())
+                brain.print(wall_char)
+                brain.print(path_char if wall_in_path else wall_char)
+                brain.print(wall_char)
+            brain.print(self.nodes[self.width][y_pos].get_unicode_char())
 
 
+# The robot object is what manages the state and movement of the robot
 class Robot:
+    # This constructor sets up all of the robots properties
     def __init__(self, maze, maze_cell_length=250, distance_unit=MM, angle_unit=DEGREES, ):
+        # These values set the physical robots properties
         drivetrain.set_drive_velocity(100, PERCENT)
         drivetrain.set_turn_velocity(100, PERCENT)
+        pen.move(DOWN)
 
+        # These values set the robot's internal maze to the maze specified in the parameters
         self.maze = maze
         self.maze_cell_length = maze_cell_length
+
+        # These values dictate the units that the robot should use
         self.distance_unit = distance_unit
         self.angle_unit = angle_unit
 
+        # These values are used when checking for a wall being present when looking straight at is, and to the side of it respectivly
         self.long_tolerance = 150
         self.short_tolerance = 100
         self.short_turn_offset = 30
 
+    # This method is called to make the robot drive through one square
+    # the forward parameter sets which way the robot should drive
     def drive_square(self, forward):
-        dir = FORWARD if forward else REVERSE
-        drivetrain.drive_for(dir, self.maze_cell_length, self.distance_unit)
+        drive_direction = FORWARD if forward else REVERSE
+        drivetrain.drive_for(drive_direction, self.maze_cell_length, self.distance_unit)
         return
 
+    # To get the current position of the robot as x, y co-ordinates, this method is used
     def get_current_cell_location(self):
         x_pos = location.position(X, MM) + 1000
         y_pos = location.position(Y, MM) + 1000
 
-        x_cell = x_pos // 250
-        y_cell = y_pos // 250
+        x_cell = x_pos // self.maze_cell_length
+        y_cell = y_pos // self.maze_cell_length
+
+        # the returned x_cell and y_cell numbers are the x and y positions of the robot respectively
+        # if the maze was to be thought of as a grid
         return x_cell, y_cell
 
+    # the cell returned by this method is which cell in the maze that the robot is currently located in
     def get_current_cell(self):
         cell_location = self.get_current_cell_location()
         return self.maze.cells[cell_location[0]][cell_location[1]]
 
+    # get_facing_wall returns which wall from the Walls enum that the robot is currently facing
     def get_facing_wall(self):
-        heading = drivetrain.heading(DEGREES)
+        heading = drivetrain.heading(self.angle_unit)
+
+        # These cases calculate which wall to return based on which direction the robot is facing
         if heading > 315 or heading < 45:
             return Walls.North
         if 45 <= heading < 135:
@@ -444,121 +496,113 @@ class Robot:
         if 225 <= heading < 315:
             return Walls.West
 
+    # This method turns the robot so it faces the wall specified in the parameters
     def turn_to_wall(self, wall):
-        facing_wall = self.get_facing_wall()
+        self.get_facing_wall()
+        # Here we take the modulo of the heading so that it is always positive
         target_wall_heading = (90 * wall) % 360
         drivetrain.turn_to_heading(target_wall_heading, self.angle_unit)
-        self.check_full_forward()
+        # The robot also checks in front of it regardless of what action is calling this method
+        # This is so it can extract as much information out of each movement because it is facing directly at a wall
+        self.check_forward_wall(True)
 
+    # During the maze exploration algorithm, to save time some walls are checked by only turning a small amount
+    # the wall specified what wall it should turn to, and clockwise is boolean which is True when you want to approach turning clockwise
     def turn_short_to_wall(self, wall, clockwise):  # clockwise is if you are going clockwise
+        # Here we assume the robot will come from the anticlockwise direction
         target_wall_heading = (90 * wall + self.short_turn_offset)
+        # The if statement below sets the heading to the correct value if clockwise parameter is True
         if clockwise: target_wall_heading -= 2 * self.short_turn_offset
         target_wall_heading %= 360
         drivetrain.turn_to_heading(target_wall_heading, self.angle_unit)
 
+    # Drive through wall is used when the robot needs to drive through a square at the wall specified
     def drive_through_wall(self, wall):
         facing_wall = self.get_facing_wall()
+        # To decide if the robot should travel forward or reverse to increase speed, the wall is checked for if it is in front, or directly behind the robot
         if facing_wall == wall:
             self.turn_to_wall(wall)
+            # For each of the different cases, for the direction needed to turn to go through the wall
+            # Following making the appropriate turn, the robot drives through a length of the maze grid size using the method below
             self.drive_square(True)
             return
+        # This check will see if the wall is not in front or behind the wall
         if wall % 2 != facing_wall % 2:
             self.turn_to_wall(wall)
             self.drive_square(True)
             return
+        # If the wall is behind the robot, it squares up the robot to face the facing wall fully, and then reverses
         self.turn_to_wall((wall + 2) % 4)
         self.drive_square(False)
 
-    def update_forward(self, current_position, step, facing_wall, state):
-
-        if facing_wall == Walls.North:
-            if current_position[1] + step >= len(self.maze.cells[current_position[0]]): return
-            self.maze.update_cell(current_position[0], current_position[1] + step, facing_wall, state)
-
-        if facing_wall == Walls.East:
-            if current_position[0] + step >= len(self.maze.cells): return
-            self.maze.update_cell(current_position[0] + step, current_position[1], facing_wall, state)
-
-        if facing_wall == Walls.South:
-            if current_position[1] - step < 0: return
-            self.maze.update_cell(current_position[0], current_position[1] - step, facing_wall, state)
-
-        if facing_wall == Walls.East:
-            if current_position[0] - step < 0: return
-            self.maze.update_cell(current_position[0] - step, current_position[1], facing_wall, state)
-
-    def check_long_forward(self):
-        current_position = self.get_current_cell_location()
-        facing_wall = self.get_facing_wall()
-        distance_to_wall = distance.get_distance(self.distance_unit)
-        sensor_range = distance_to_wall // 250
-
-        step_zero = distance_to_wall < 150
-        self.maze.update_cell(current_position[0], current_position[1], facing_wall, step_zero)
-        if sensor_range == 0:
-            return self.get_current_cell().check_wall(facing_wall)
-
-        for step in range(1, sensor_range):
-            self.update_forward(current_position, step, facing_wall, False)
-        self.update_forward(current_position, sensor_range, facing_wall, False)
-        return self.get_current_cell().check_wall(facing_wall)
-
-    def check_full_forward(self):
+    # The check forward wall is called to check a wall that the robot is looking at
+    # It will return True if a wall is present
+    # Initially this function checked further away than a single square in front, but due to accuracy issues as the robot was moving
+    # testing dictated that it was faster to remove it than slow down the turn speed or wait for a period
+    def check_forward_wall(self, full):
+        # Firstly details about the robots state are gotten
         current_position = self.get_current_cell_location()
         facing_wall = self.get_facing_wall()
         distance_to_wall = distance.get_distance(self.distance_unit)
 
-        state = distance_to_wall < 150
+        # A tolerance variable is then declared and set depending on if the check if fully facing the wall
+        tolerance = 0
+        if full:
+            tolerance = self.long_tolerance
+        else:
+            tolerance = self.short_tolerance
+
+        # The wall in front is then checked against the tolerance
+        state = distance_to_wall < tolerance
+        # The maze is then updated with the new knowledge of the wall
         self.maze.update_cell(current_position[0], current_position[1], facing_wall, state)
+
+        # Following the update of the cell, the robot checks to see if there are any corners who's values it can infer
+        # This check must not be done inside the update function itself, as it exceeds the vexcode vr's platform recursion limits for functions
         fixed_corners = -1
         while fixed_corners != 0:
             fixed_corners = self.maze.fix_actually_known_corners()
+
+        # following this the value of the wall just checked is returned. This is checked rather than returned from the state as the wall may have been overridden with static data
+        # This is the case with the walls at the south of the starting point and the north of the ending point
         return self.get_current_cell().check_wall(facing_wall)
 
-        if distance_to_wall > 250:
-            self.update_forward(current_position, 0, facing_wall, False)
-            if distance_to_wall > 500:
-                self.update_forward(current_position, 1, facing_wall, False)
-                if distance_to_wall > 750:
-                    self.update_forward(current_position, 2, facing_wall, False)
-                    if distance_to_wall > 1000:
-                        self.update_forward(current_position, 4, facing_wall, False)
-                        if distance_to_wall > 1250:
-                            self.update_forward(current_position, 5, facing_wall, False)
-                            if distance_to_wall > 1500:
-                                self.update_forward(current_position, 6, facing_wall, False)
-                                if distance_to_wall > 1750:
-                                    self.update_forward(current_position, 7, facing_wall, False)
-                                else: self.update_forward(current_position, 6, facing_wall, True)
-                            else: self.update_forward(current_position, 5, facing_wall, True)
-                        else: self.update_forward(current_position, 4, facing_wall, True)
-                    else: self.update_forward(current_position, 3, facing_wall, True)
-                else: self.update_forward(current_position, 2, facing_wall, True)
-            else: self.update_forward(current_position, 1, facing_wall, True)
-        else: self.update_forward(current_position, 0, facing_wall, True)
-
-        return self.get_current_cell().check_wall(facing_wall)
-
+    # This method checks if a wall is present when the robot is only partially facing the wall
     def check_short_forward(self):
+        # Firstly details about the robots state are gotten
         current_position = self.get_current_cell_location()
         facing_wall = self.get_facing_wall()
         distance_to_wall = distance.get_distance(self.distance_unit)
+
+        # The wall in front is then checked against the short wall tolerance property set in the constructor
         state = distance_to_wall < self.short_tolerance
+        # The maze is then updated with the new knowledge of the wall
         self.maze.update_cell(current_position[0], current_position[1], facing_wall, state)
+
+        # Following the update of the cell, the robot checks to see if there are any corners who's values it can infer
+        # This check must not be done inside the update function itself, as it exceeds the vexcode vr's platform recursion limits for functions
         fixed_corners = -1
         while fixed_corners != 0:
             fixed_corners = self.maze.fix_actually_known_corners()
+
+        # following this the value of the wall just checked is returned. This is checked rather than returned from the state as the wall may have been overridden with static data
+        # This is the case with the walls at the south of the starting point and the north of the ending point
         return self.get_current_cell().check_wall(facing_wall)
 
     def check_junction(self):
+        # To check a junction, the current cell is gotten from the get_current_cell method
         current_cell = self.get_current_cell()
+
+        # The enum values of each of the walls is then calculated as integers
         wall_one_direction = int(self.get_facing_wall())
         wall_zero_direction = (wall_one_direction - 1) % 4
         wall_two_direction = (wall_one_direction + 1) % 4
         wall_three_direction = (wall_one_direction + 2) % 4
 
-        wall_one = self.check_full_forward()
+        # As wall one is defined as the facing wall, we can check its distance manually
+        wall_one = self.check_forward_wall(True)
 
+        # Here we check if the wall is known, and if it is the value is saved to the wall_(wall number) variable
         if current_cell.wall_known(wall_zero_direction):
             wall_zero = current_cell.check_wall(wall_zero_direction)
         else:
@@ -574,51 +618,59 @@ class Robot:
         else:
             wall_three = None
 
+        # To ensure the smallest amount of turning is used, the following series of if statements are used
+        # The first set is all the cases of walls not being known, given the wall to the left (wall_zero) is not known
         if wall_zero is None:
             if wall_three is None:
                 self.turn_to_wall(wall_zero_direction)
-                wall_zero = self.check_full_forward()
+                wall_zero = self.check_forward_wall(True)
                 if wall_two is None:
                     self.turn_to_wall(wall_three_direction)
-                    wall_three = self.check_full_forward()
+                    wall_three = self.check_forward_wall(True)
                     self.turn_short_to_wall(wall_two_direction, True)
-                    wall_two = self.check_short_forward()
+                    wall_two = self.check_forward_wall(False)
                 else:
                     self.turn_short_to_wall(wall_three_direction, False)
-                    wall_three = self.check_short_forward()
+                    wall_three = self.check_forward_wall(False)
             elif wall_two is None:
                 self.turn_short_to_wall(wall_zero_direction, False)
-                wall_zero = self.check_short_forward()
+                wall_zero = self.check_forward_wall(False)
                 self.turn_short_to_wall(wall_two_direction, True)
-                wall_two = self.check_short_forward()
+                wall_two = self.check_forward_wall(False)
             else:
                 self.turn_short_to_wall(wall_zero_direction, False)
-                wall_zero = self.check_short_forward()
+                wall_zero = self.check_forward_wall(False)
+        # The next set checks what walls to the right of the robot are present, given the wall to the left is known
         elif wall_two is None:
             if wall_three is None:
                 self.turn_to_wall(wall_two_direction)
-                wall_two = self.check_full_forward()
+                wall_two = self.check_forward_wall(True)
                 self.turn_short_to_wall(wall_three_direction, True)
-                wall_three = self.check_short_forward()
+                wall_three = self.check_forward_wall(False)
             else:
                 self.turn_short_to_wall(wall_two_direction, True)
-                wall_two = self.check_short_forward()
+                wall_two = self.check_forward_wall(False)
+        # Even if the left and right walls are known, we may be able to extract more data by checking the wall again as we pass it, as this does not incurr a time loss
         elif wall_three is None:
             self.turn_to_wall(wall_two_direction)
-            wall_two = self.check_full_forward()
+            wall_two = self.check_forward_wall(True)
             self.turn_short_to_wall(wall_three_direction, True)
-            wall_three = self.check_short_forward()
+            wall_three = self.check_forward_wall(False)
 
-        directions_sorted = []  # say line too long so did append
+        # The walls are then sorted by the direction value which corresponds to the Walls enum
+        # This ensures that the values returned by this function are in the same order every time
+        directions_sorted = []
+        # Append is used here as creating this list as a list literal would leave a very long line
         directions_sorted.append((wall_zero_direction, wall_zero))
         directions_sorted.append((wall_one_direction, wall_one))
         directions_sorted.append((wall_two_direction, wall_two))
         directions_sorted.append((wall_three_direction, wall_three))
-
         directions_sorted.sort()
 
+        # As the directions_sorted have been sorted by their direction, only the states of the walls needs to be returned
         result = []
-        for dir in directions_sorted: result.append(dir[1])
+        # the for loop below takes each wall state and adds it to the result list to be returned
+        for junction_direction in directions_sorted: result.append(junction_direction[1])
         return result
 
     def tremaux_algorithm(self):
@@ -661,82 +713,96 @@ class Robot:
             current_cell.visit_wall(next_direction)
             self.drive_through_wall(next_direction)
 
-
-
-
-
-
+# The static map data below sets given values for states of walls in the maze
 def set_static_map_data(maze):
-    maze.update_cell(0, 0, Walls.South, True)
-    maze.update_cell(1, 0, Walls.South, True)
-    maze.update_cell(2, 0, Walls.South, True)
-    maze.update_cell(3, 0, Walls.South, True)
+    # This states that we want to use the global competition mode constant in this function
+    global COMPETITION_MODE
+
+    # here we must set the data for the walls at the start and end as the down eye color sensor appears not to work on certain browsers
+    # The alternative to this is to use the down eye to check for green or red and set the wall approperatly, but this is safer given the context
     maze.update_cell(4, 0, Walls.South, True)
-    maze.update_cell(5, 0, Walls.South, True)
-    maze.update_cell(6, 0, Walls.South, True)
-    maze.update_cell(7, 0, Walls.South, True)
-
-    maze.update_cell(0, 7, Walls.North, True)
-    maze.update_cell(1, 7, Walls.North, True)
-    maze.update_cell(2, 7, Walls.North, True)
     maze.update_cell(3, 7, Walls.North, True)
-    maze.update_cell(4, 7, Walls.North, True)
-    maze.update_cell(5, 7, Walls.North, True)
-    maze.update_cell(6, 7, Walls.North, True)
-    maze.update_cell(7, 7, Walls.North, True)
 
-    maze.update_cell(0, 0, Walls.West, True)
-    maze.update_cell(0, 1, Walls.West, True)
-    maze.update_cell(0, 2, Walls.West, True)
-    maze.update_cell(0, 3, Walls.West, True)
-    maze.update_cell(0, 4, Walls.West, True)
-    maze.update_cell(0, 5, Walls.West, True)
-    maze.update_cell(0, 6, Walls.West, True)
-    maze.update_cell(0, 7, Walls.West, True)
+    # The competition mode setting relies on the knowledge that the outsides of the maze will always have walls
+    # The calls to update the maze below force this condition so that the robot doesnt need to check if walls are present at the edges of the maze
+    # and thus saves time from turning
 
-    maze.update_cell(7, 0, Walls.East, True)
-    maze.update_cell(7, 1, Walls.East, True)
-    maze.update_cell(7, 2, Walls.East, True)
-    maze.update_cell(7, 3, Walls.East, True)
-    maze.update_cell(7, 4, Walls.East, True)
-    maze.update_cell(7, 5, Walls.East, True)
-    maze.update_cell(7, 6, Walls.East, True)
-    maze.update_cell(7, 7, Walls.East, True)
+    # The robot will function without this and it can be disabled at the top of the file
+    if COMPETITION_MODE:
+        # Sets the bottom walls to be present
+        maze.update_cell(0, 0, Walls.South, True)
+        maze.update_cell(1, 0, Walls.South, True)
+        maze.update_cell(2, 0, Walls.South, True)
+        maze.update_cell(3, 0, Walls.South, True)
+        maze.update_cell(5, 0, Walls.South, True)
+        maze.update_cell(6, 0, Walls.South, True)
+        maze.update_cell(7, 0, Walls.South, True)
+
+        # Sets the top walls to be present
+        maze.update_cell(0, 7, Walls.North, True)
+        maze.update_cell(1, 7, Walls.North, True)
+        maze.update_cell(2, 7, Walls.North, True)
+        maze.update_cell(3, 7, Walls.North, True)
+        maze.update_cell(4, 7, Walls.North, True)
+        maze.update_cell(5, 7, Walls.North, True)
+        maze.update_cell(6, 7, Walls.North, True)
+        maze.update_cell(7, 7, Walls.North, True)
+
+        # Sets the left walls to be present
+        maze.update_cell(0, 0, Walls.West, True)
+        maze.update_cell(0, 1, Walls.West, True)
+        maze.update_cell(0, 2, Walls.West, True)
+        maze.update_cell(0, 3, Walls.West, True)
+        maze.update_cell(0, 4, Walls.West, True)
+        maze.update_cell(0, 5, Walls.West, True)
+        maze.update_cell(0, 6, Walls.West, True)
+        maze.update_cell(0, 7, Walls.West, True)
+
+        # Sets the right walls to be present
+        maze.update_cell(7, 0, Walls.East, True)
+        maze.update_cell(7, 1, Walls.East, True)
+        maze.update_cell(7, 2, Walls.East, True)
+        maze.update_cell(7, 3, Walls.East, True)
+        maze.update_cell(7, 4, Walls.East, True)
+        maze.update_cell(7, 5, Walls.East, True)
+        maze.update_cell(7, 6, Walls.East, True)
+        maze.update_cell(7, 7, Walls.East, True)
 
 
+# The main function is used to start and stop the entire process. It also controls everything in the environment such as setting up the maze, robot and printing the maze when mapping is complete
 def main():
+    # Here we create the maze object, with the size of the maze
     maze = Maze(8, 8)
-    robot = Robot(maze)
 
-    pen.move(DOWN)
-    brain_print_line("Creating maze....")
+    # Here we initialize the maze as the method cannot be called in the constructor of the maze itself
     maze.initialize_maze()
 
-    drivetrain.set_drive_velocity(1000, PERCENT)
-    drivetrain.set_turn_velocity(1000, PERCENT)
+    # Static data for the map is set for the maze created above. The amount of static data depends on the use of the COMPETITION_MODE setting
+    # by default it will just use the start and end points for every map in the vexcode platform
     set_static_map_data(maze)
 
+    # The robot is then created using the maze to base itself off of
+    robot = Robot(maze)
+    # The robot is then instructed to use the Tremaux algorithm to map the maze
     robot.tremaux_algorithm()
 
-    brain.new_line()
+    # Once mapping is complete we clear the console then print the maze in a plain format
+    brain.clear()
     maze.print_plain()
-    brain.new_line()
+    
+    # The maze then uses a breath first algorithm to generate an optimal path through the internal representation of the maze
     path = maze.pathfind_breath_first(4, 0, 3, 7)
+    
+    # This path is then displayed on the printout of the maze using '•' as a marker for the path
+    brain.new_line()
     maze.print_path(path, '•')
+    
+    # As the maze mapping and printout are complete, we then stop the project
     brain_print_line("Program Complete")
     stop_project()
 
 
-def brain_print(item):
-    brain.print(item)
-    return
-
-
-def brain_newline():
-    brain.new_line()
-    return
-
-
+# This function is used to print somthing on a new line rather than call brain.newline and brain.print every time
 def brain_print_line(obj):
     brain.new_line()
     brain.print(obj)
