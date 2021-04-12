@@ -28,6 +28,7 @@ class Walls(IntEnum):
 # The node object can be thought of similar to a corner in the maze. It stores information about its connected nodes and various properties.
 # Analysis of this allow the robot to infer the state of different walls in the maze so the robot doesn't have to travel there
 class Node:
+    # This dictionary values allow for the each wall being present to return a different character to be printed when the maze is being displayed
     unicode_chars = dict([
         (1, ' '),  # Walls: None
         (2, '│'),  # Walls: North
@@ -47,33 +48,44 @@ class Node:
         (210, '┼'),  # Walls: North, East, South, West
     ])
 
+    # This constructor initialises the various properties that every node has
     def __init__(self):
+        # Each node is linked to four other nodes potentially, A link to another node dictates that in the maze, those two nodes should have a wall between them
         self.north_node = None
         self.east_node = None
         self.south_node = None
         self.west_node = None
 
+        # If the state each part of the node is known, these value is used. This allows for the above nodes to be None and for valid information to still be returned
         self.north_known = False
         self.east_known = False
         self.south_known = False
         self.west_known = False
 
+        # The tremaux algorithm used requires various visited properties to be used on each corridor. This property is kept here rather than on the cell so that multiple cells will not
+        # Need to be updated when a wall is visited as they will pull the information directly from a node
         self.north_visited = 0
         self.east_visited = 0
         self.south_visited = 0
         self.west_visited = 0
 
+        # if an edge is calculated to be present or not, that requires the forced property to be set so that the maze can correctly infer the states of any cells which have a non known wall, but many forced walls
+        # As these two must have at least one non forced, not present wall so that the area can be traversed
         self.north_forced = False
         self.east_forced = False
         self.south_forced = False
         self.west_forced = False
 
+    # This method will return the unicode character that represents the state of the node
     def get_unicode_char(self):
         node_state = 1
+        # Every wall being present causes the node state to be multiplied by a prime number
+        # Prime numbers being multiplied together cause unique numbers to be created which can then be used to access the dictionary with the correct unicode character
         if self.north_node is not None: node_state *= 2
         if self.east_node is not None: node_state *= 3
         if self.south_node is not None: node_state *= 5
         if self.west_node is not None: node_state *= 7
+        # The character corresponding to the state from the dictionary, is then returned to the calling function
         return self.unicode_chars[node_state]
 
 
@@ -81,33 +93,42 @@ class Node:
 # A cell wall is made up of two nodes, with a wall being present if the two nodes are connected. The nodes also store if they know what their value is
 # so that when checking if all the walls in a cell are known, it allows for nodes to not be connected and for the robot to know their definite state
 class Cell:
+    # The cells constructor is used to let the cell know of the maze and its position inside of it
     def __init__(self, x_pos, y_pos, maze):
         self.x_position = x_pos
         self.y_position = y_pos
         self.maze = maze
 
+        # The cell is also linked to a set of nodes, one for each of its corners
         self.top_right_node = None
         self.top_left_node = None
         self.bottom_left_node = None
         self.bottom_right_node = None
 
+        # Neighbouring cells will also be linked to each other in order in the initialize function to allow updates between multiple cells
         self.north_cell = None
         self.east_cell = None
         self.south_cell = None
         self.west_cell = None
 
+    # This method will setup the properties from the constructor with their actual values
     def initialize_cell(self):
+        # The linked nodes are set to variables based on their position in the linked maze's node array
         self.top_right_node = self.maze.nodes[self.x_position + 1][self.y_position + 1]
         self.top_left_node = self.maze.nodes[self.x_position][self.y_position + 1]
         self.bottom_left_node = self.maze.nodes[self.x_position][self.y_position]
         self.bottom_right_node = self.maze.nodes[self.x_position + 1][self.y_position]
 
+        # Neighbouring cells are linked in a similar way, and also checked to ensure cells that do not exist are not being accessed.
         self.north_cell = self.maze.cells[self.x_position][self.y_position + 1] if self.y_position + 1 < self.maze.height else None
         self.east_cell = self.maze.cells[self.x_position + 1][self.y_position] if self.x_position + 1 < self.maze.width else None
         self.south_cell = self.maze.cells[self.x_position][self.y_position - 1] if self.y_position - 1 >= 0 else None
         self.west_cell = self.maze.cells[self.x_position - 1][self.y_position] if self.x_position - 1 >= 0 else None
 
+    # From the tremaux algorithm, when the robot drives through a wall, it is visited
+    # This method will update the nodes linked to the cell so that they will return the correct value when checked
     def visit_wall(self, wall):
+        # The below if statements will select the appropriate linked nodes for the given wall in the parameters and update how many times they have been visited
         if wall == Walls.North:
             self.top_right_node.west_visited += 1
             self.top_left_node.east_visited += 1
@@ -121,6 +142,7 @@ class Cell:
             self.top_left_node.south_visited += 1
             self.bottom_left_node.north_visited += 1
 
+    # This method will take the wall given in the parameters and return how many times that wall has been visited according to the tremaux algorithm
     def check_visited(self, wall):
         if wall == Walls.North:
             return self.top_right_node.west_visited
@@ -130,11 +152,15 @@ class Cell:
             return self.bottom_right_node.west_visited
         if wall == Walls.West:
             return self.top_left_node.south_visited
+        # The returned value is gotten from the linked node so that even if another cell was the one which set the amount of times visited, the value returned will still be correct
 
+    # When a cells wall state is inferred from the data the maze contains this function is called
     def force_wall(self, wall, amount=2):
+        # The amount parameter sets how many times that cell should have been visited according to the tremaux algorithm
         for visit in range(amount):
             self.visit_wall(wall)
 
+        # The following if statements then update the correct wall and set the nodes forced variable so it can be returned correctly when checking if a cell has been forced
         if wall == Walls.North:
             self.update_north(False)
             self.top_right_node.west_forced = True
@@ -152,6 +178,7 @@ class Cell:
             self.top_left_node.south_forced = True
             self.bottom_left_node.north_forced = True
 
+    # To see if a cell wall's state has been assigned from context, this function checks the appropriate linked nodes for their forced state and return the value
     def check_forced(self, wall):
         if wall == Walls.North:
             return self.top_right_node.west_forced
@@ -162,35 +189,45 @@ class Cell:
         if wall == Walls.West:
             return self.top_left_node.south_forced
 
+    # This method updates the cells north wall to the given state and sets its value to known
     def update_north(self, state):
+        # Nodes are used so that changes are synced among different cells
         self.top_right_node.west_known = True
         self.top_left_node.east_known = True
         if state:
             self.top_right_node.west_node = self.top_left_node
             self.top_left_node.east_node = self.top_right_node
 
+    # This method updates the cells east wall to the given state and sets its value to known
     def update_east(self, state):
+        # Nodes are used so that changes are synced among different cells
         self.top_right_node.south_known = True
         self.bottom_right_node.north_known = True
         if state:
             self.top_right_node.south_node = self.bottom_right_node
             self.bottom_right_node.north_node = self.top_right_node
 
+    # This method updates the cells south wall to the given state and sets its value to known
     def update_south(self, state):
+        # Nodes are used so that changes are synced among different cells
         self.bottom_right_node.west_known = True
         self.bottom_left_node.east_known = True
         if state:
             self.bottom_right_node.west_node = self.bottom_left_node
             self.bottom_left_node.east_node = self.bottom_right_node
 
+    # This method updates the cells west wall to the given state and sets its value to known
     def update_west(self, state):
+        # Nodes are used so that changes are synced among different cells
         self.top_left_node.south_known = True
         self.bottom_left_node.north_known = True
         if state:
             self.top_left_node.south_node = self.bottom_left_node
             self.bottom_left_node.north_node = self.top_left_node
 
+    # Checking if a wall in a cell is known can be done with this function
     def wall_known(self, wall):
+        # The if statements below will check if the walls appropriate nodes have known values and if so, returns True to the calling function
         if wall == Walls.North:
             return self.top_right_node.west_known and self.top_left_node.east_known
         if wall == Walls.East:
@@ -200,6 +237,7 @@ class Cell:
         if wall == Walls.West:
             return self.top_left_node.south_known and self.bottom_left_node.north_known
 
+    # To see if all of the walls in a cell are known, this function checks if each wall is known and if so returns True
     def fully_known(self):
         top_right_known = self.top_right_node.west_known and self.top_right_node.south_known
         top_left_known = self.top_left_node.east_known and self.top_left_node.south_known
@@ -208,14 +246,17 @@ class Cell:
 
         return top_right_known and top_left_known and bottom_right_known and bottom_left_known
 
+    # Check wall will return if a wall is present in a cell, regardless of if that wall's state is actually known
     def check_wall(self, wall):
         if wall == Walls.North: return self.top_right_node.west_node is not None and self.top_left_node.east_node is not None
         if wall == Walls.East: return self.top_right_node.south_node is not None and self.bottom_right_node.north_node is not None
         if wall == Walls.South: return self.bottom_right_node.west_node is not None and self.bottom_left_node.east_node is not None
         if wall == Walls.West: return self.top_left_node.south_node is not None and self.bottom_left_node.north_node is not None
-        # throw new InvalidEnumArgumentException() :(
 
+    # This method will return the unicode character that represents the state of a given wall in the cell
     def get_unicode_char(self, wall):
+        # The check wall method is used and a unicode character is returned regardless of if the value is known or not
+        # This causes unknown values to return spaces and thus we can use the maze's print function through the exploration phase to see the robots progress
         if wall == Walls.North:
             if self.check_wall(wall):
                 return '─'
@@ -241,7 +282,9 @@ class Cell:
 
 # The maze is the overall structure of cells and what stores the representation of the real world maze.
 class Maze:
+    # The maze constructor creates the variables that will be used to store the nodes and cells inside of the made
     def __init__(self, width, height):
+        # The width and height will later be used in the initialize method for setting up the nested lists
         self.width = width
         self.height = height
 
@@ -321,22 +364,29 @@ class Maze:
             amount_changed += 1
         return amount_changed
 
-
+    # Fix Actually known corners checks every cell in the maze if it can extrapolate any edges
     def fix_actually_known_corners(self):
         amount_changed = 0
+        # the for loop below checks every cell in every cell array in the maze to try extrapolate edges in that cell
         for cell_arr in self.cells:
             for cell in cell_arr:
                 amount_changed += self.extrapolate_edges(cell)
+        # Ths amount of cells that have been changed is returned so the function can be run again using the new data it has just generated
         return amount_changed
 
+    # This method will return if a value for the state of every wall in a cell is known
     def all_cells_known(self):
         for cell_array in self.cells:
             for cell in cell_array:
+                # This method uses the cells fully_known method to check if that cell is fully known
                 cell_fully_known = cell.fully_known()
+                # When the cell is not known, the function returns as it does not need to check any more cells
                 if not cell_fully_known:
                     return False
         return True
 
+    # This pathfinding method uses a breath first algorithm to pathfind from the start position (x_start, y_start) in the parameters
+    # to the end position (x_end, y_end) specified in the parameters
     def pathfind_breath_first(self, x_start, y_start, x_end, y_end):
         stack = []
         visited_cells = {}
@@ -376,7 +426,9 @@ class Maze:
 
         return path_points
 
+    # Print plain will print the mazes current interpretation of the maze as it has been traversed. It prints from top to bottom using the characters returned by the cells and nodes themselves
     def print_plain(self):
+        # The maze firstly prints the top row of walls, as there is no cell further up and therefore a different wall must be used than the south wall which the other cells use
         for x_pos in range(self.width):
             brain.print(self.nodes[x_pos][self.height].get_unicode_char())
             decremented_height = self.height - 1
@@ -385,6 +437,7 @@ class Maze:
             brain.print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
         brain.print(self.nodes[self.width][self.height].get_unicode_char())
 
+        # Then the rest of the cells are printed from top to bottom, using the unicode characters that the cells return
         for y_pos in reversed(range(self.height)):
             brain.new_line()
             for x_pos in range(self.width):
@@ -393,9 +446,11 @@ class Maze:
                 brain.print(' ')
                 brain.print(' ')
             decremented_width = self.width - 1
+            # here the east wall must be used as there is no other cell further right
             brain.print(self.cells[decremented_width][y_pos].get_unicode_char(Walls.East))
 
             brain.new_line()
+            # Following from printing the left and right walls, the south walls are then printed in a similar fashion
             for x_pos in range(self.width):
                 brain.print(self.nodes[x_pos][y_pos].get_unicode_char())
                 brain.print(self.cells[x_pos][y_pos].get_unicode_char(Walls.South))
@@ -403,7 +458,10 @@ class Maze:
                 brain.print(self.cells[x_pos][y_pos].get_unicode_char(Walls.South))
             brain.print(self.nodes[self.width][y_pos].get_unicode_char())
 
+    # Print path is essentially a clone of print plain, except for it adds additional characters in the center of cells and walls where the path goes through
+    # The path displayed is the one specified in the parameters, and it is shown using the path character also specified
     def print_path(self, path, path_char):
+        # Similarly this method starts by printing the north walls, which do not need to use the path as you cannot go through the bounding walls
         for x_pos in range(self.width):
             brain.print(self.nodes[x_pos][self.height].get_unicode_char())
             decremented_height = self.height - 1
@@ -412,11 +470,15 @@ class Maze:
             brain.print(self.cells[x_pos][decremented_height].get_unicode_char(Walls.North))
         brain.print(self.nodes[self.width][self.height].get_unicode_char())
 
+        # THen the right and left walls are printed
         for y_pos in reversed(range(self.height)):
             brain.new_line()
             for x_pos in range(self.width):
                 wall_char = self.cells[x_pos][y_pos].get_unicode_char(Walls.West)
+                # These checks dictate if a path character should be used as the wall or cell is in the path
+                # Mid in path means that the center of a cell is in the path
                 mid_in_path = (x_pos, y_pos) in path
+                # Wall in path is for when the path goes through that wall
                 wall_in_path = wall_char == ' ' and mid_in_path and (x_pos - 1, y_pos) in path
                 brain.print(path_char if wall_in_path else wall_char)
                 brain.print(' ')
@@ -425,10 +487,11 @@ class Maze:
             decremented_width = self.width - 1
             brain.print(self.cells[decremented_width][y_pos].get_unicode_char(Walls.East))
 
+            # finally the bottom walls are printed with another wall_in_path variable which dictates if the path character should be used instead of a space
             brain.new_line()
             for x_pos in range(self.width):
                 wall_char = self.cells[x_pos][y_pos].get_unicode_char(Walls.South)
-                wall_in_path = wall_char == ' ' and (x_pos, y_pos) in path and (x_pos, y_pos - 1) in path  # Might have check for x_pos == 0
+                wall_in_path = wall_char == ' ' and (x_pos, y_pos) in path and (x_pos, y_pos - 1) in path
                 brain.print(self.nodes[x_pos][y_pos].get_unicode_char())
                 brain.print(wall_char)
                 brain.print(path_char if wall_in_path else wall_char)
@@ -453,7 +516,7 @@ class Robot:
         self.distance_unit = distance_unit
         self.angle_unit = angle_unit
 
-        # These values are used when checking for a wall being present when looking straight at is, and to the side of it respectivly
+        # These values are used when checking for a wall being present when looking straight at is, and to the side of it respectively
         self.long_tolerance = 150
         self.short_tolerance = 100
         self.short_turn_offset = 30
@@ -545,8 +608,7 @@ class Robot:
         facing_wall = self.get_facing_wall()
         distance_to_wall = distance.get_distance(self.distance_unit)
 
-        # A tolerance variable is then declared and set depending on if the check if fully facing the wall
-        tolerance = 0
+        # A tolerance variable is then set depending on if the check if fully facing the wall
         if full:
             tolerance = self.long_tolerance
         else:
@@ -650,7 +712,7 @@ class Robot:
             else:
                 self.turn_short_to_wall(wall_two_direction, True)
                 wall_two = self.check_forward_wall(False)
-        # Even if the left and right walls are known, we may be able to extract more data by checking the wall again as we pass it, as this does not incurr a time loss
+        # Even if the left and right walls are known, we may be able to extract more data by checking the wall again as we pass it, as this does not incur a time loss
         elif wall_three is None:
             self.turn_to_wall(wall_two_direction)
             wall_two = self.check_forward_wall(True)
@@ -674,20 +736,28 @@ class Robot:
         return result
 
     def tremaux_algorithm(self):
+        # The algorithm will loop while it is not finished
         finished = False
         while not finished:
+
+            # Every loop it will check if it can infer any edges
             fixed_corners = -1
             while fixed_corners != 0:
                 fixed_corners = self.maze.fix_actually_known_corners()
 
+            # it then updated the finiched variable and returns if it is finished
             finished = self.maze.all_cells_known()
             if finished: return
+
+            # The current maze interpretation is then printed as a nice visual progress display
             brain.clear()
             self.maze.print_plain()
 
+            # variables are then created about the current state of the robot
             current_cell = self.get_current_cell()
             facing_wall = self.get_facing_wall()
 
+            # The paths returned by the junction check are then checks for how many times they have been visited
             possible_paths = []
             junction_states = self.check_junction()
             for index in range(len(junction_states)):
@@ -695,8 +765,11 @@ class Robot:
                     times_visited = current_cell.check_visited(index)
                     possible_paths.append((times_visited, index))
 
+            # They are then sorted
             possible_paths.sort()
             next_direction = None
+
+            # The next direction is chosen giving priority to easier to reach paths (less turning)
             min_visited = possible_paths[0][0]
             for pair in possible_paths:
                 if pair[1] == facing_wall and pair[0] == min_visited:
@@ -710,8 +783,10 @@ class Robot:
             if next_direction is None:
                 next_direction = possible_paths[0][1]
 
+            # The path is then marked as visited and then the robot drives through it
             current_cell.visit_wall(next_direction)
             self.drive_through_wall(next_direction)
+
 
 # The static map data below sets given values for states of walls in the maze
 def set_static_map_data(maze):
@@ -719,7 +794,7 @@ def set_static_map_data(maze):
     global COMPETITION_MODE
 
     # here we must set the data for the walls at the start and end as the down eye color sensor appears not to work on certain browsers
-    # The alternative to this is to use the down eye to check for green or red and set the wall approperatly, but this is safer given the context
+    # The alternative to this is to use the down eye to check for green or red and set the wall appropriately, but this is safer given the context
     maze.update_cell(4, 0, Walls.South, True)
     maze.update_cell(3, 7, Walls.North, True)
 
@@ -789,20 +864,20 @@ def main():
     # Once mapping is complete we clear the console then print the maze in a plain format
     brain.clear()
     maze.print_plain()
-    
+
     # The maze then uses a breath first algorithm to generate an optimal path through the internal representation of the maze
     path = maze.pathfind_breath_first(4, 0, 3, 7)
-    
+
     # This path is then displayed on the printout of the maze using '•' as a marker for the path
     brain.new_line()
     maze.print_path(path, '•')
-    
+
     # As the maze mapping and printout are complete, we then stop the project
     brain_print_line("Program Complete")
     stop_project()
 
 
-# This function is used to print somthing on a new line rather than call brain.newline and brain.print every time
+# This function is used to print something on a new line rather than call brain.newline and brain.print every time
 def brain_print_line(obj):
     brain.new_line()
     brain.print(obj)
